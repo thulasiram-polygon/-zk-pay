@@ -17,14 +17,12 @@
 // For balance SMT =  userNonce  => userBalance with creation proof
 // Event(userID, root, nonce, timestamp) will be emitted when the user is registered.
 const { newMemEmptyTrie, buildPoseidon } = require("circomlibjs");
-const { randomBytes } = require("crypto");
 const { assert } = require("chai");
 const { wasm } = require("circom_tester");
 const path = require("path");
 const { ethers } = require("hardhat");
 const snarkjs = require("snarkjs");
 const { BigNumber } = require("@ethersproject/bignumber");
-const { createHash } = require("crypto");
 const Logger = require("logplease");
 
 const fs = require("fs");
@@ -34,6 +32,7 @@ Logger.setLogLevel(Logger.LogLevels.DEBUG);
 
 // For storing users previous txn hash;
 let oldTxHashMapping = {};
+let userNonceMapping = {};
 
 describe("Anonimus Payment Verifier", function () {
 	// Create few users with IDs
@@ -77,9 +76,10 @@ describe("Anonimus Payment Verifier", function () {
 			poseidon.F.toObject(paymenAndNonceHash),
 		);
 		const newRoot = userStateTrie.F.toObject(userStateTrie.root);
+		console.log("newRoot", newRoot);
 		const siblings = convertSiblings(res.siblings);
 
-		const input = {
+		const inputs = {
 			userID,
 			views,
 			secret,
@@ -90,7 +90,7 @@ describe("Anonimus Payment Verifier", function () {
 			oldRoot,
 		};
 
-		return input;
+		return { inputs, newHash: poseidon.F.toObject(paymenAndNonceHash) };
 	};
 
 	before(async () => {
@@ -116,6 +116,7 @@ describe("Anonimus Payment Verifier", function () {
 
 			await userStateTrie.insert(userIDs[i], zeroHash);
 			oldTxHashMapping[userIDs[i]] = zeroHash;
+			userNonceMapping[userIDs[i]] = 0;
 		}
 	});
 
@@ -156,9 +157,9 @@ describe("Anonimus Payment Verifier", function () {
 		const userID = 1;
 		const views = 100000;
 		const secret = 1;
-		const userOldTxNonce = 0;
+		const userOldTxNonce = userNonceMapping[userID];
 		const oldTxHash = oldTxHashMapping[userID];
-		const inputs = await createPaymentTransferRequest(
+		const { inputs, newHash } = await createPaymentTransferRequest(
 			userID,
 			views,
 			secret,
@@ -171,7 +172,7 @@ describe("Anonimus Payment Verifier", function () {
 			"./build/payment-processer-test_js/payment-processer-test.wasm",
 			"./build/payment-processer-test.zkey",
 		);
-		// console.log("publicSignals", publicSignals);
+		//console.log("publicSignals", publicSignals);
 		// console.log("proof", proof);
 		const vKey = JSON.parse(
 			fs.readFileSync("./build/payment-processer-test_vkey.json").toString(),
@@ -183,6 +184,58 @@ describe("Anonimus Payment Verifier", function () {
 			logger,
 		);
 		assert(res, "Proof is not valid");
+		oldTxHashMapping[userID] = newHash;
+		userNonceMapping[userID] = userOldTxNonce + 1;
+	});
+
+	it("Tests multiple payment txns", async () => {
+		// Genarate bulk payments and store proof data in a local text file.
+		const userID = 1;
+
+		const userPayment = [
+			{ views: 100000, secret: 1 },
+			{ views: 200000, secret: 2 },
+			{ views: 300000, secret: 3 },
+			{ views: 400000, secret: 4 },
+		];
+
+		for (let i = 0; i < userPayment.length; i++) {
+			const views = userPayment[i].views;
+			const secret = userPayment[i].secret;
+			const userOldTxNonce = userNonceMapping[userID];
+			const oldTxHash = oldTxHashMapping[userID];
+			console.log("oldTxHash", oldTxHash);
+			console.log("nonce", userOldTxNonce);
+			const { inputs, newHash } = await createPaymentTransferRequest(
+				userID,
+				views,
+				secret,
+				userOldTxNonce,
+				oldTxHash,
+			);
+			console.log("inputs", inputs);
+			const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+				inputs,
+				"./build/payment-processer-test_js/payment-processer-test.wasm",
+				"./build/payment-processer-test.zkey",
+			);
+			// console.log("publicSignals", publicSignals);
+			// console.log("proof", proof);
+			const vKey = JSON.parse(
+				fs.readFileSync("./build/payment-processer-test_vkey.json").toString(),
+			);
+			const res = await snarkjs.groth16.verify(
+				vKey,
+				publicSignals,
+				proof,
+				logger,
+			);
+			assert(res, "Proof is not valid");
+			oldTxHashMapping[userID] = newHash;
+			userNonceMapping[userID] = userOldTxNonce + 1;
+
+			//= poseidon.F.toObject(publicSignals[0]);
+		}
 	});
 });
 
