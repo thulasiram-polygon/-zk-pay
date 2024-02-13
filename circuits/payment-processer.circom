@@ -1,4 +1,6 @@
-include 'payment-amount-verifyer.circom';
+pragma circom 2.1.6;
+
+include "payment-amount-verifyer.circom";
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/smt/smtprocessor.circom";
 
@@ -12,7 +14,7 @@ template PaymentProcesser(nLevels) {
     signal input siblings[nLevels];
     signal input oldTxHash;
     signal input oldRoot;
-    signal input newRoot;
+    signal output newRoot;
 
     component paymentAmountChecker = PaymentAmountVerifyer();
     paymentAmountChecker.views <== views;
@@ -39,11 +41,8 @@ template PaymentProcesser(nLevels) {
     smtprocessor.newKey <== userID;
     smtprocessor.newValue <== poseidon.out;
     
-    // Checks if the new root is correctly calculated
-    // and transaction is included in the new root
-    newRoot === smtprocessor.newRoot;
+    // Output the newRoot 
+    newRoot <== smtprocessor.newRoot;
     
-
 }
 
-component main {public [userID, views, userOldTxNonce, oldRoot ]} = PaymentProcesser(10);

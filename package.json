@@ -4,6 +4,9 @@
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",
     "hardhat": "^2.19.5"
   },
+  "scripts": {
+    "prepare": "sh scripts/prepare.sh"
+  },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.1",
     "circom_tester": "^0.0.20",
