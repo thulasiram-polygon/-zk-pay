@@ -10,6 +10,10 @@
 - Install the project dependencies and prepare by `npm install` in the project directory
 - Start Hardhat tests by `npx hardhat test` in the project directory
 
+## Caution:
+
+- The project is for educational purposes only. Do not use it in production.
+
 ## License
 
 MIT License
